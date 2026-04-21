@@ -6,6 +6,7 @@ interface Voucher {
   remainingCount: number;
   totalCount: number;
   expiryDate: string;
+  history: string[]; // ISO datetime strings
 }
 
 const STORAGE_KEY = 'povo_voucher';
@@ -13,7 +14,9 @@ const STORAGE_KEY = 'povo_voucher';
 function load(): Voucher | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    return { history: [], ...v };
   } catch {
     return null;
   }
@@ -28,12 +31,22 @@ function formatDate(dateStr: string): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
+function formatDateTime(isoStr: string): string {
+  const d = new Date(isoStr);
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getFullYear()}/${mm}/${dd} ${hh}:${min}`;
+}
+
 export default function App() {
   const [voucher, setVoucher] = useState<Voucher | null>(load);
   const [editing, setEditing] = useState(!load());
   const [copied, setCopied] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [form, setForm] = useState<Voucher>(
-    voucher ?? { description: '', code: '', remainingCount: 0, totalCount: 0, expiryDate: '' }
+    voucher ?? { description: '', code: '', remainingCount: 0, totalCount: 0, expiryDate: '', history: [] }
   );
 
   const expired = voucher ? new Date(voucher.expiryDate) < new Date(new Date().toDateString()) : false;
@@ -42,7 +55,11 @@ export default function App() {
   async function handleCopy() {
     if (unavailable || !voucher) return;
     await navigator.clipboard.writeText(voucher.code);
-    const updated = { ...voucher, remainingCount: voucher.remainingCount - 1 };
+    const updated: Voucher = {
+      ...voucher,
+      remainingCount: voucher.remainingCount - 1,
+      history: [new Date().toISOString(), ...voucher.history],
+    };
     setVoucher(updated);
     save(updated);
     setCopied(true);
@@ -219,6 +236,38 @@ export default function App() {
             </span>
           </div>
         </div>
+
+        {/* History */}
+        {voucher.history.length > 0 && (
+          <div className="mt-3 bg-white rounded-2xl shadow-md overflow-hidden">
+            <button
+              onClick={() => setShowHistory(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            >
+              <span>使用履歴（{voucher.history.length}件）</span>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16" height="16"
+                viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round"
+                className={`transition-transform duration-200 ${showHistory ? 'rotate-180' : ''}`}
+              >
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            {showHistory && (
+              <ul className="divide-y divide-gray-100 border-t border-gray-100">
+                {voucher.history.map((iso, i) => (
+                  <li key={iso} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                    <span className="text-gray-400">#{voucher.history.length - i}</span>
+                    <span className="text-gray-600">{formatDateTime(iso)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
